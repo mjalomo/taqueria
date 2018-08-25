@@ -130,6 +130,7 @@ class RequestFoodTableMap extends TableMap
         $this->setClassName('\\RequestFood');
         $this->setPackage('');
         $this->setUseIdGenerator(false);
+        $this->setIsCrossRef(true);
         // columns
         $this->addForeignPrimaryKey('request_id', 'RequestId', 'INTEGER' , 'request', 'id', true, null, null);
         $this->addForeignPrimaryKey('food_id', 'FoodId', 'INTEGER' , 'food', 'id', true, null, null);

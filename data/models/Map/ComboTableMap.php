@@ -154,6 +154,8 @@ class ComboTableMap extends TableMap
     1 => ':id',
   ),
 ), null, null, 'ComboRequests', false);
+        $this->addRelation('Food', '\\Food', RelationMap::MANY_TO_MANY, array(), null, null, 'Foods');
+        $this->addRelation('Request', '\\Request', RelationMap::MANY_TO_MANY, array(), null, null, 'Requests');
     } // buildRelations()
 
     /**

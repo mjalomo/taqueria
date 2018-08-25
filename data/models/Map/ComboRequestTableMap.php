@@ -130,6 +130,7 @@ class ComboRequestTableMap extends TableMap
         $this->setClassName('\\ComboRequest');
         $this->setPackage('');
         $this->setUseIdGenerator(false);
+        $this->setIsCrossRef(true);
         // columns
         $this->addForeignPrimaryKey('combo_id', 'ComboId', 'INTEGER' , 'combo', 'id', true, null, null);
         $this->addForeignPrimaryKey('request_id', 'RequestId', 'INTEGER' , 'request', 'id', true, null, null);

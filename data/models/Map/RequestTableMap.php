@@ -160,6 +160,8 @@ class RequestTableMap extends TableMap
     1 => ':id',
   ),
 ), null, null, 'RequestFoods', false);
+        $this->addRelation('Combo', '\\Combo', RelationMap::MANY_TO_MANY, array(), null, null, 'Combos');
+        $this->addRelation('Food', '\\Food', RelationMap::MANY_TO_MANY, array(), null, null, 'Foods');
     } // buildRelations()
 
     /**

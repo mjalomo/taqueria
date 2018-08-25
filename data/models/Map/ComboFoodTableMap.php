@@ -130,6 +130,7 @@ class ComboFoodTableMap extends TableMap
         $this->setClassName('\\ComboFood');
         $this->setPackage('');
         $this->setUseIdGenerator(false);
+        $this->setIsCrossRef(true);
         // columns
         $this->addForeignPrimaryKey('combo_id', 'ComboId', 'INTEGER' , 'combo', 'id', true, null, null);
         $this->addForeignPrimaryKey('food_id', 'FoodId', 'INTEGER' , 'food', 'id', true, null, null);

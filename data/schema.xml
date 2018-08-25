@@ -7,7 +7,7 @@
       <parameter name="Engine" value="InnoDB"/>
     </vendor>
   </table>
-  <table name="combo_food" idMethod="native" phpName="ComboFood">
+  <table name="combo_food" idMethod="native" phpName="ComboFood" isCrossRef="true">
     <column name="combo_id" phpName="ComboId" type="INTEGER" primaryKey="true" required="true"/>
     <column name="food_id" phpName="FoodId" type="INTEGER" primaryKey="true" required="true"/>
     <foreign-key foreignTable="combo" name="combo_food_ibfk_1">
@@ -23,7 +23,7 @@
       <parameter name="Engine" value="InnoDB"/>
     </vendor>
   </table>
-  <table name="combo_request" idMethod="native" phpName="ComboRequest">
+  <table name="combo_request" idMethod="native" phpName="ComboRequest" isCrossRef="true">
     <column name="combo_id" phpName="ComboId" type="INTEGER" primaryKey="true" required="true"/>
     <column name="request_id" phpName="RequestId" type="INTEGER" primaryKey="true" required="true"/>
     <foreign-key foreignTable="combo" name="combo_request_ibfk_1">
@@ -55,7 +55,7 @@
       <parameter name="Engine" value="InnoDB"/>
     </vendor>
   </table>
-  <table name="request_food" idMethod="native" phpName="RequestFood">
+  <table name="request_food" idMethod="native" phpName="RequestFood" isCrossRef="true">
     <column name="request_id" phpName="RequestId" type="INTEGER" primaryKey="true" required="true"/>
     <column name="food_id" phpName="FoodId" type="INTEGER" primaryKey="true" required="true"/>
     <foreign-key foreignTable="request" name="request_food_ibfk_1">

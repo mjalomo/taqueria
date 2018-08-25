@@ -518,6 +518,40 @@ abstract class FoodQuery extends ModelCriteria
     }
 
     /**
+     * Filter the query by a related Combo object
+     * using the combo_food table as cross reference
+     *
+     * @param Combo $combo the related object to use as filter
+     * @param string $comparison Operator to use for the column comparison, defaults to Criteria::EQUAL
+     *
+     * @return ChildFoodQuery The current query, for fluid interface
+     */
+    public function filterByCombo($combo, $comparison = Criteria::EQUAL)
+    {
+        return $this
+            ->useComboFoodQuery()
+            ->filterByCombo($combo, $comparison)
+            ->endUse();
+    }
+
+    /**
+     * Filter the query by a related Request object
+     * using the request_food table as cross reference
+     *
+     * @param Request $request the related object to use as filter
+     * @param string $comparison Operator to use for the column comparison, defaults to Criteria::EQUAL
+     *
+     * @return ChildFoodQuery The current query, for fluid interface
+     */
+    public function filterByRequest($request, $comparison = Criteria::EQUAL)
+    {
+        return $this
+            ->useRequestFoodQuery()
+            ->filterByRequest($request, $comparison)
+            ->endUse();
+    }
+
+    /**
      * Exclude object from result
      *
      * @param   ChildFood $food Object to remove from the list of results

@@ -2,12 +2,16 @@
 
 namespace Base;
 
+use \Combo as ChildCombo;
 use \ComboFood as ChildComboFood;
 use \ComboFoodQuery as ChildComboFoodQuery;
+use \ComboQuery as ChildComboQuery;
 use \Food as ChildFood;
 use \FoodQuery as ChildFoodQuery;
+use \Request as ChildRequest;
 use \RequestFood as ChildRequestFood;
 use \RequestFoodQuery as ChildRequestFoodQuery;
+use \RequestQuery as ChildRequestQuery;
 use \Exception;
 use \PDO;
 use Map\ComboFoodTableMap;
@@ -101,12 +105,44 @@ abstract class Food implements ActiveRecordInterface
     protected $collRequestFoodsPartial;
 
     /**
+     * @var        ObjectCollection|ChildCombo[] Cross Collection to store aggregation of ChildCombo objects.
+     */
+    protected $collCombos;
+
+    /**
+     * @var bool
+     */
+    protected $collCombosPartial;
+
+    /**
+     * @var        ObjectCollection|ChildRequest[] Cross Collection to store aggregation of ChildRequest objects.
+     */
+    protected $collRequests;
+
+    /**
+     * @var bool
+     */
+    protected $collRequestsPartial;
+
+    /**
      * Flag to prevent endless save loop, if this object is referenced
      * by another object which falls in this transaction.
      *
      * @var boolean
      */
     protected $alreadyInSave = false;
+
+    /**
+     * An array of objects scheduled for deletion.
+     * @var ObjectCollection|ChildCombo[]
+     */
+    protected $combosScheduledForDeletion = null;
+
+    /**
+     * An array of objects scheduled for deletion.
+     * @var ObjectCollection|ChildRequest[]
+     */
+    protected $requestsScheduledForDeletion = null;
 
     /**
      * An array of objects scheduled for deletion.
@@ -552,6 +588,8 @@ abstract class Food implements ActiveRecordInterface
 
             $this->collRequestFoods = null;
 
+            $this->collCombos = null;
+            $this->collRequests = null;
         } // if (deep)
     }
 
@@ -665,6 +703,64 @@ abstract class Food implements ActiveRecordInterface
                 }
                 $this->resetModified();
             }
+
+            if ($this->combosScheduledForDeletion !== null) {
+                if (!$this->combosScheduledForDeletion->isEmpty()) {
+                    $pks = array();
+                    foreach ($this->combosScheduledForDeletion as $entry) {
+                        $entryPk = [];
+
+                        $entryPk[1] = $this->getId();
+                        $entryPk[0] = $entry->getId();
+                        $pks[] = $entryPk;
+                    }
+
+                    \ComboFoodQuery::create()
+                        ->filterByPrimaryKeys($pks)
+                        ->delete($con);
+
+                    $this->combosScheduledForDeletion = null;
+                }
+
+            }
+
+            if ($this->collCombos) {
+                foreach ($this->collCombos as $combo) {
+                    if (!$combo->isDeleted() && ($combo->isNew() || $combo->isModified())) {
+                        $combo->save($con);
+                    }
+                }
+            }
+
+
+            if ($this->requestsScheduledForDeletion !== null) {
+                if (!$this->requestsScheduledForDeletion->isEmpty()) {
+                    $pks = array();
+                    foreach ($this->requestsScheduledForDeletion as $entry) {
+                        $entryPk = [];
+
+                        $entryPk[1] = $this->getId();
+                        $entryPk[0] = $entry->getId();
+                        $pks[] = $entryPk;
+                    }
+
+                    \RequestFoodQuery::create()
+                        ->filterByPrimaryKeys($pks)
+                        ->delete($con);
+
+                    $this->requestsScheduledForDeletion = null;
+                }
+
+            }
+
+            if ($this->collRequests) {
+                foreach ($this->collRequests as $request) {
+                    if (!$request->isDeleted() && ($request->isNew() || $request->isModified())) {
+                        $request->save($con);
+                    }
+                }
+            }
+
 
             if ($this->comboFoodsScheduledForDeletion !== null) {
                 if (!$this->comboFoodsScheduledForDeletion->isEmpty()) {
@@ -1688,6 +1784,492 @@ abstract class Food implements ActiveRecordInterface
     }
 
     /**
+     * Clears out the collCombos collection
+     *
+     * This does not modify the database; however, it will remove any associated objects, causing
+     * them to be refetched by subsequent calls to accessor method.
+     *
+     * @return void
+     * @see        addCombos()
+     */
+    public function clearCombos()
+    {
+        $this->collCombos = null; // important to set this to NULL since that means it is uninitialized
+    }
+
+    /**
+     * Initializes the collCombos crossRef collection.
+     *
+     * By default this just sets the collCombos collection to an empty collection (like clearCombos());
+     * however, you may wish to override this method in your stub class to provide setting appropriate
+     * to your application -- for example, setting the initial array to the values stored in database.
+     *
+     * @return void
+     */
+    public function initCombos()
+    {
+        $collectionClassName = ComboFoodTableMap::getTableMap()->getCollectionClassName();
+
+        $this->collCombos = new $collectionClassName;
+        $this->collCombosPartial = true;
+        $this->collCombos->setModel('\Combo');
+    }
+
+    /**
+     * Checks if the collCombos collection is loaded.
+     *
+     * @return bool
+     */
+    public function isCombosLoaded()
+    {
+        return null !== $this->collCombos;
+    }
+
+    /**
+     * Gets a collection of ChildCombo objects related by a many-to-many relationship
+     * to the current object by way of the combo_food cross-reference table.
+     *
+     * If the $criteria is not null, it is used to always fetch the results from the database.
+     * Otherwise the results are fetched from the database the first time, then cached.
+     * Next time the same method is called without $criteria, the cached collection is returned.
+     * If this ChildFood is new, it will return
+     * an empty collection or the current collection; the criteria is ignored on a new object.
+     *
+     * @param      Criteria $criteria Optional query object to filter the query
+     * @param      ConnectionInterface $con Optional connection object
+     *
+     * @return ObjectCollection|ChildCombo[] List of ChildCombo objects
+     */
+    public function getCombos(Criteria $criteria = null, ConnectionInterface $con = null)
+    {
+        $partial = $this->collCombosPartial && !$this->isNew();
+        if (null === $this->collCombos || null !== $criteria || $partial) {
+            if ($this->isNew()) {
+                // return empty collection
+                if (null === $this->collCombos) {
+                    $this->initCombos();
+                }
+            } else {
+
+                $query = ChildComboQuery::create(null, $criteria)
+                    ->filterByFood($this);
+                $collCombos = $query->find($con);
+                if (null !== $criteria) {
+                    return $collCombos;
+                }
+
+                if ($partial && $this->collCombos) {
+                    //make sure that already added objects gets added to the list of the database.
+                    foreach ($this->collCombos as $obj) {
+                        if (!$collCombos->contains($obj)) {
+                            $collCombos[] = $obj;
+                        }
+                    }
+                }
+
+                $this->collCombos = $collCombos;
+                $this->collCombosPartial = false;
+            }
+        }
+
+        return $this->collCombos;
+    }
+
+    /**
+     * Sets a collection of Combo objects related by a many-to-many relationship
+     * to the current object by way of the combo_food cross-reference table.
+     * It will also schedule objects for deletion based on a diff between old objects (aka persisted)
+     * and new objects from the given Propel collection.
+     *
+     * @param  Collection $combos A Propel collection.
+     * @param  ConnectionInterface $con Optional connection object
+     * @return $this|ChildFood The current object (for fluent API support)
+     */
+    public function setCombos(Collection $combos, ConnectionInterface $con = null)
+    {
+        $this->clearCombos();
+        $currentCombos = $this->getCombos();
+
+        $combosScheduledForDeletion = $currentCombos->diff($combos);
+
+        foreach ($combosScheduledForDeletion as $toDelete) {
+            $this->removeCombo($toDelete);
+        }
+
+        foreach ($combos as $combo) {
+            if (!$currentCombos->contains($combo)) {
+                $this->doAddCombo($combo);
+            }
+        }
+
+        $this->collCombosPartial = false;
+        $this->collCombos = $combos;
+
+        return $this;
+    }
+
+    /**
+     * Gets the number of Combo objects related by a many-to-many relationship
+     * to the current object by way of the combo_food cross-reference table.
+     *
+     * @param      Criteria $criteria Optional query object to filter the query
+     * @param      boolean $distinct Set to true to force count distinct
+     * @param      ConnectionInterface $con Optional connection object
+     *
+     * @return int the number of related Combo objects
+     */
+    public function countCombos(Criteria $criteria = null, $distinct = false, ConnectionInterface $con = null)
+    {
+        $partial = $this->collCombosPartial && !$this->isNew();
+        if (null === $this->collCombos || null !== $criteria || $partial) {
+            if ($this->isNew() && null === $this->collCombos) {
+                return 0;
+            } else {
+
+                if ($partial && !$criteria) {
+                    return count($this->getCombos());
+                }
+
+                $query = ChildComboQuery::create(null, $criteria);
+                if ($distinct) {
+                    $query->distinct();
+                }
+
+                return $query
+                    ->filterByFood($this)
+                    ->count($con);
+            }
+        } else {
+            return count($this->collCombos);
+        }
+    }
+
+    /**
+     * Associate a ChildCombo to this object
+     * through the combo_food cross reference table.
+     *
+     * @param ChildCombo $combo
+     * @return ChildFood The current object (for fluent API support)
+     */
+    public function addCombo(ChildCombo $combo)
+    {
+        if ($this->collCombos === null) {
+            $this->initCombos();
+        }
+
+        if (!$this->getCombos()->contains($combo)) {
+            // only add it if the **same** object is not already associated
+            $this->collCombos->push($combo);
+            $this->doAddCombo($combo);
+        }
+
+        return $this;
+    }
+
+    /**
+     *
+     * @param ChildCombo $combo
+     */
+    protected function doAddCombo(ChildCombo $combo)
+    {
+        $comboFood = new ChildComboFood();
+
+        $comboFood->setCombo($combo);
+
+        $comboFood->setFood($this);
+
+        $this->addComboFood($comboFood);
+
+        // set the back reference to this object directly as using provided method either results
+        // in endless loop or in multiple relations
+        if (!$combo->isFoodsLoaded()) {
+            $combo->initFoods();
+            $combo->getFoods()->push($this);
+        } elseif (!$combo->getFoods()->contains($this)) {
+            $combo->getFoods()->push($this);
+        }
+
+    }
+
+    /**
+     * Remove combo of this object
+     * through the combo_food cross reference table.
+     *
+     * @param ChildCombo $combo
+     * @return ChildFood The current object (for fluent API support)
+     */
+    public function removeCombo(ChildCombo $combo)
+    {
+        if ($this->getCombos()->contains($combo)) {
+            $comboFood = new ChildComboFood();
+            $comboFood->setCombo($combo);
+            if ($combo->isFoodsLoaded()) {
+                //remove the back reference if available
+                $combo->getFoods()->removeObject($this);
+            }
+
+            $comboFood->setFood($this);
+            $this->removeComboFood(clone $comboFood);
+            $comboFood->clear();
+
+            $this->collCombos->remove($this->collCombos->search($combo));
+
+            if (null === $this->combosScheduledForDeletion) {
+                $this->combosScheduledForDeletion = clone $this->collCombos;
+                $this->combosScheduledForDeletion->clear();
+            }
+
+            $this->combosScheduledForDeletion->push($combo);
+        }
+
+
+        return $this;
+    }
+
+    /**
+     * Clears out the collRequests collection
+     *
+     * This does not modify the database; however, it will remove any associated objects, causing
+     * them to be refetched by subsequent calls to accessor method.
+     *
+     * @return void
+     * @see        addRequests()
+     */
+    public function clearRequests()
+    {
+        $this->collRequests = null; // important to set this to NULL since that means it is uninitialized
+    }
+
+    /**
+     * Initializes the collRequests crossRef collection.
+     *
+     * By default this just sets the collRequests collection to an empty collection (like clearRequests());
+     * however, you may wish to override this method in your stub class to provide setting appropriate
+     * to your application -- for example, setting the initial array to the values stored in database.
+     *
+     * @return void
+     */
+    public function initRequests()
+    {
+        $collectionClassName = RequestFoodTableMap::getTableMap()->getCollectionClassName();
+
+        $this->collRequests = new $collectionClassName;
+        $this->collRequestsPartial = true;
+        $this->collRequests->setModel('\Request');
+    }
+
+    /**
+     * Checks if the collRequests collection is loaded.
+     *
+     * @return bool
+     */
+    public function isRequestsLoaded()
+    {
+        return null !== $this->collRequests;
+    }
+
+    /**
+     * Gets a collection of ChildRequest objects related by a many-to-many relationship
+     * to the current object by way of the request_food cross-reference table.
+     *
+     * If the $criteria is not null, it is used to always fetch the results from the database.
+     * Otherwise the results are fetched from the database the first time, then cached.
+     * Next time the same method is called without $criteria, the cached collection is returned.
+     * If this ChildFood is new, it will return
+     * an empty collection or the current collection; the criteria is ignored on a new object.
+     *
+     * @param      Criteria $criteria Optional query object to filter the query
+     * @param      ConnectionInterface $con Optional connection object
+     *
+     * @return ObjectCollection|ChildRequest[] List of ChildRequest objects
+     */
+    public function getRequests(Criteria $criteria = null, ConnectionInterface $con = null)
+    {
+        $partial = $this->collRequestsPartial && !$this->isNew();
+        if (null === $this->collRequests || null !== $criteria || $partial) {
+            if ($this->isNew()) {
+                // return empty collection
+                if (null === $this->collRequests) {
+                    $this->initRequests();
+                }
+            } else {
+
+                $query = ChildRequestQuery::create(null, $criteria)
+                    ->filterByFood($this);
+                $collRequests = $query->find($con);
+                if (null !== $criteria) {
+                    return $collRequests;
+                }
+
+                if ($partial && $this->collRequests) {
+                    //make sure that already added objects gets added to the list of the database.
+                    foreach ($this->collRequests as $obj) {
+                        if (!$collRequests->contains($obj)) {
+                            $collRequests[] = $obj;
+                        }
+                    }
+                }
+
+                $this->collRequests = $collRequests;
+                $this->collRequestsPartial = false;
+            }
+        }
+
+        return $this->collRequests;
+    }
+
+    /**
+     * Sets a collection of Request objects related by a many-to-many relationship
+     * to the current object by way of the request_food cross-reference table.
+     * It will also schedule objects for deletion based on a diff between old objects (aka persisted)
+     * and new objects from the given Propel collection.
+     *
+     * @param  Collection $requests A Propel collection.
+     * @param  ConnectionInterface $con Optional connection object
+     * @return $this|ChildFood The current object (for fluent API support)
+     */
+    public function setRequests(Collection $requests, ConnectionInterface $con = null)
+    {
+        $this->clearRequests();
+        $currentRequests = $this->getRequests();
+
+        $requestsScheduledForDeletion = $currentRequests->diff($requests);
+
+        foreach ($requestsScheduledForDeletion as $toDelete) {
+            $this->removeRequest($toDelete);
+        }
+
+        foreach ($requests as $request) {
+            if (!$currentRequests->contains($request)) {
+                $this->doAddRequest($request);
+            }
+        }
+
+        $this->collRequestsPartial = false;
+        $this->collRequests = $requests;
+
+        return $this;
+    }
+
+    /**
+     * Gets the number of Request objects related by a many-to-many relationship
+     * to the current object by way of the request_food cross-reference table.
+     *
+     * @param      Criteria $criteria Optional query object to filter the query
+     * @param      boolean $distinct Set to true to force count distinct
+     * @param      ConnectionInterface $con Optional connection object
+     *
+     * @return int the number of related Request objects
+     */
+    public function countRequests(Criteria $criteria = null, $distinct = false, ConnectionInterface $con = null)
+    {
+        $partial = $this->collRequestsPartial && !$this->isNew();
+        if (null === $this->collRequests || null !== $criteria || $partial) {
+            if ($this->isNew() && null === $this->collRequests) {
+                return 0;
+            } else {
+
+                if ($partial && !$criteria) {
+                    return count($this->getRequests());
+                }
+
+                $query = ChildRequestQuery::create(null, $criteria);
+                if ($distinct) {
+                    $query->distinct();
+                }
+
+                return $query
+                    ->filterByFood($this)
+                    ->count($con);
+            }
+        } else {
+            return count($this->collRequests);
+        }
+    }
+
+    /**
+     * Associate a ChildRequest to this object
+     * through the request_food cross reference table.
+     *
+     * @param ChildRequest $request
+     * @return ChildFood The current object (for fluent API support)
+     */
+    public function addRequest(ChildRequest $request)
+    {
+        if ($this->collRequests === null) {
+            $this->initRequests();
+        }
+
+        if (!$this->getRequests()->contains($request)) {
+            // only add it if the **same** object is not already associated
+            $this->collRequests->push($request);
+            $this->doAddRequest($request);
+        }
+
+        return $this;
+    }
+
+    /**
+     *
+     * @param ChildRequest $request
+     */
+    protected function doAddRequest(ChildRequest $request)
+    {
+        $requestFood = new ChildRequestFood();
+
+        $requestFood->setRequest($request);
+
+        $requestFood->setFood($this);
+
+        $this->addRequestFood($requestFood);
+
+        // set the back reference to this object directly as using provided method either results
+        // in endless loop or in multiple relations
+        if (!$request->isFoodsLoaded()) {
+            $request->initFoods();
+            $request->getFoods()->push($this);
+        } elseif (!$request->getFoods()->contains($this)) {
+            $request->getFoods()->push($this);
+        }
+
+    }
+
+    /**
+     * Remove request of this object
+     * through the request_food cross reference table.
+     *
+     * @param ChildRequest $request
+     * @return ChildFood The current object (for fluent API support)
+     */
+    public function removeRequest(ChildRequest $request)
+    {
+        if ($this->getRequests()->contains($request)) {
+            $requestFood = new ChildRequestFood();
+            $requestFood->setRequest($request);
+            if ($request->isFoodsLoaded()) {
+                //remove the back reference if available
+                $request->getFoods()->removeObject($this);
+            }
+
+            $requestFood->setFood($this);
+            $this->removeRequestFood(clone $requestFood);
+            $requestFood->clear();
+
+            $this->collRequests->remove($this->collRequests->search($request));
+
+            if (null === $this->requestsScheduledForDeletion) {
+                $this->requestsScheduledForDeletion = clone $this->collRequests;
+                $this->requestsScheduledForDeletion->clear();
+            }
+
+            $this->requestsScheduledForDeletion->push($request);
+        }
+
+
+        return $this;
+    }
+
+    /**
      * Clears the current object, sets all attributes to their default values and removes
      * outgoing references as well as back-references (from other objects to this one. Results probably in a database
      * change of those foreign objects when you call `save` there).
@@ -1725,10 +2307,22 @@ abstract class Food implements ActiveRecordInterface
                     $o->clearAllReferences($deep);
                 }
             }
+            if ($this->collCombos) {
+                foreach ($this->collCombos as $o) {
+                    $o->clearAllReferences($deep);
+                }
+            }
+            if ($this->collRequests) {
+                foreach ($this->collRequests as $o) {
+                    $o->clearAllReferences($deep);
+                }
+            }
         } // if ($deep)
 
         $this->collComboFoods = null;
         $this->collRequestFoods = null;
+        $this->collCombos = null;
+        $this->collRequests = null;
     }
 
     /**

@@ -1,15 +1,17 @@
 <?php
 require '../vendor/autoload.php';
 
-// Create and configure Slim app
-$config = ['settings' => [
-  'addContentLengthHeader' => false,
-]];
-$app = new \Slim\App($config);
+require '../config.php';
+require '../data/generated-conf/config.php';
+
+$app = new \Slim\App(['settings'=>$config]);
+
+$container = $app->getContainer();
+$container['view'] = new \Slim\Views\PhpRenderer("../app/views/");
 
 // Define app routes
-$app->get('/hello/{name}', function ($request, $response, $args) {
-  return $response->write("Hello " . $args['name']);
+$app->get('/', function ($request, $response, $args) {
+  $this->view->render($response,'index.php', ['router'=>$this->router]);
 });
 
 // Run app
